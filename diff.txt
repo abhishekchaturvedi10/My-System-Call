@@ -1,0 +1,81 @@
+diff -rupN originallinux5.9.1/arch/x86/entry/syscalls/syscall_64.tbl updatedlinux5.9.1/arch/x86/entry/syscalls/syscall_64.tbl
+--- originallinux5.9.1/arch/x86/entry/syscalls/syscall_64.tbl	2020-10-17 12:01:22.000000000 +0530
++++ updatedlinux5.9.1/arch/x86/entry/syscalls/syscall_64.tbl	2020-10-28 21:14:55.510688933 +0530
+@@ -404,3 +404,4 @@
+ 545	x32	execveat		compat_sys_execveat
+ 546	x32	preadv2			compat_sys_preadv64v2
+ 547	x32	pwritev2		compat_sys_pwritev64v2
++548     64      sh_task_info           sys_sh_task_info
+\ No newline at end of file
+diff -rupN originallinux5.9.1/kernel/sys.c updatedlinux5.9.1/kernel/sys.c
+--- originallinux5.9.1/kernel/sys.c	2020-10-17 12:01:22.000000000 +0530
++++ updatedlinux5.9.1/kernel/sys.c	2020-10-28 21:15:47.315601874 +0530
+@@ -2694,4 +2694,68 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct c
+ 		return -EFAULT;
+ 	return 0;
+ }
++
++SYSCALL_DEFINE2(sh_task_info, int, pid, char*, filename1) 
++{
++	struct task_struct *task;
++
++	struct file *file;
++
++	char filename[100], string[400], filepath[200];
++
++	int nbytes;
++
++	char *cwd;
++
++	char *buf = (char *)kmalloc(GFP_KERNEL, 100*sizeof(char));
++	
++	struct path pwd, root;
++
++	copy_from_user(filename, filename1, 100); 
++
++	if (pid > 32768 || pid <= 0)
++		return -EINVAL;
++
++	task= find_task_by_vpid((pid_t)pid);
++
++	if(!task)
++		return -ESRCH;
++
++	if(filename == NULL)
++		return -EINVAL;
++
++	else{
++
++		pwd = current->fs->pwd;
++		
++		path_get(&pwd);
++		
++		root=  current->fs->root;
++	
++		path_get(&root);
++		
++		cwd = d_path(&pwd, buf, 100*sizeof(char));
++
++		sprintf(filepath, "%s/%s", cwd, filename);
++
++		file = filp_open(filepath, O_WRONLY|O_CREAT, 0777);
++
++		if(IS_ERR(file))
++			return -EISDIR;
++
++		sprintf(string,"The process ID: %d\nProcess Name: %s\nProcess RT_Priority: %d\nProcess State: %ld\nProcess Vruntime: %llu\n", pid, task->comm, task->rt_priority, task->state, task->se.vruntime);
++
++		nbytes = strlen(string);
++
++		kernel_write(file, string, nbytes, &file->f_pos);
++	} 
++
++	printk("The common PID: %d\nProcess Name: %s\n", task->pid, task->comm);
++	printk("Process RT Priority: %d\nProcess State: %ld\nProcess Vruntime: %llu\n", task->rt_priority, task->state, task->se.vruntime);
++
++	printk("\n\n");
++    	
++	return 0;
++}
++
+ #endif /* CONFIG_COMPAT */
